@@ -41,7 +41,8 @@ namespace internal {
 static constexpr char kAuthHeader[] = "authorization";
 
 ARROW_FLIGHT_EXPORT
-Status SchemaToString(const Schema& schema, std::string* out);
+Status SchemaToString(const Schema& schema, std::string* out,
+                      const std::string& serialization_cache_key);
 
 // These functions depend on protobuf types which are not exported in the Flight DLL.
 

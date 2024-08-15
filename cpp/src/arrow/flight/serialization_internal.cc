@@ -26,6 +26,7 @@
 #include "arrow/ipc/writer.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "arrow/util/key_value_metadata.h"
 
 // Lambda helper & CTAD
 template <class... Ts>
@@ -33,7 +34,7 @@ struct overloaded : Ts... {
   using Ts::operator()...;
 };
 template <class... Ts>  // CTAD will not be needed for >=C++20
-overloaded(Ts...)->overloaded<Ts...>;
+overloaded(Ts...) -> overloaded<Ts...>;
 
 namespace arrow {
 namespace flight {
@@ -255,7 +256,15 @@ arrow::Result<FlightInfo> FromProto(const pb::FlightInfo& pb_info) {
   FlightInfo::Data info;
   RETURN_NOT_OK(FromProto(pb_info.flight_descriptor(), &info.descriptor));
 
-  info.schema = pb_info.schema();
+  // Decompress the schema.
+  auto codec = arrow::util::Codec::Create(arrow::Compression::ZSTD).ValueOrDie();
+  auto decompressed_schema = *AllocateResizableBuffer(pb_info.schema_size());
+
+  auto decompress_result = codec->Decompress(
+      pb_info.schema().size(), reinterpret_cast<const uint8_t*>(pb_info.schema().data()),
+      pb_info.schema_size(), decompressed_schema->mutable_data());
+
+  info.schema = decompressed_schema->ToString();
 
   info.endpoints.resize(pb_info.endpoint_size());
   for (int i = 0; i < pb_info.endpoint_size(); ++i) {
@@ -281,20 +290,92 @@ Status FromProto(const pb::SchemaResult& pb_result, std::string* result) {
   return Status::OK();
 }
 
-Status SchemaToString(const Schema& schema, std::string* out) {
+std::unordered_map<std::string, std::string> schema_to_string_cache;
+
+Status SchemaToString(const Schema& schema, std::string* out,
+                      const std::string& serialization_cache_key) {
+  // Since schemas hardly ever change in Flight servers we can cache
+  // the serialized schema to avoid repeated serialization.
+
+  if (serialization_cache_key != "") {
+    auto it = schema_to_string_cache.find(serialization_cache_key);
+    if (it != schema_to_string_cache.end()) {
+      // printf("%s - cache hit for schema2string\n", serialization_cache_key.c_str());
+      *out = it->second;
+      return Status::OK();
+    } else {
+      // printf("%s - cache miss for schema2string\n", serialization_cache_key.c_str());
+    }
+  }
+
   ipc::DictionaryMemo unused_dict_memo;
   ARROW_ASSIGN_OR_RAISE(std::shared_ptr<Buffer> serialized_schema,
                         ipc::SerializeSchema(schema));
+
   *out = std::string(reinterpret_cast<const char*>(serialized_schema->data()),
                      static_cast<size_t>(serialized_schema->size()));
+
+  if (serialization_cache_key != "") {
+    // printf("Caching serialized schema under %s\n", serialization_cache_key.c_str());
+    schema_to_string_cache[serialization_cache_key] = *out;
+  }
+
   return Status::OK();
 }
+
+std::unordered_map<std::string, std::tuple<int64_t, std::string>> compressed_schema_cache;
 
 Status ToProto(const FlightInfo& info, pb::FlightInfo* pb_info) {
   // clear any repeated fields
   pb_info->clear_endpoint();
 
-  pb_info->set_schema(info.serialized_schema());
+  // pb_info->set_schema(info.serialized_schema());
+
+  // We should compress this schema.
+
+  auto serialized_schema = info.serialized_schema();
+  // Compress the data
+
+  bool had_cached_schema = false;
+  if (info.serialization_cache_key() != "") {
+    auto cached_compressed_schema_it =
+        compressed_schema_cache.find(info.serialization_cache_key());
+    if (cached_compressed_schema_it != compressed_schema_cache.end()) {
+      // printf("%s cache hit for compressed schema\n",
+      //        info.serialization_cache_key().c_str());
+      pb_info->set_schema_size(std::get<0>(cached_compressed_schema_it->second));
+      pb_info->set_schema(std::get<1>(cached_compressed_schema_it->second));
+      had_cached_schema = true;
+    } else {
+      // printf("%s cache miss for compressed schema\n",
+      //        info.serialization_cache_key().c_str());
+    }
+  }
+
+  if (!had_cached_schema) {
+    auto codec = arrow::util::Codec::Create(arrow::Compression::ZSTD, 3).ValueOrDie();
+
+    int64_t max_compressed_len;
+    max_compressed_len = codec->MaxCompressedLen(
+        serialized_schema.size(),
+        reinterpret_cast<const uint8_t*>(serialized_schema.data()));
+    auto compressed_schema = *AllocateResizableBuffer(max_compressed_len);
+    auto compressed_schema_len =
+        *codec->Compress(serialized_schema.size(),
+                         reinterpret_cast<const uint8_t*>(serialized_schema.data()),
+                         max_compressed_len, compressed_schema->mutable_data());
+    RETURN_NOT_OK(compressed_schema->Resize(compressed_schema_len));
+
+    // Set the decompressed schema size.
+    pb_info->set_schema_size(serialized_schema.size());
+    pb_info->set_schema(compressed_schema.get()->data(), compressed_schema_len);
+
+    if (info.serialization_cache_key() != "") {
+      std::tuple<int64_t, std::string> cached_schema_result =
+          std::make_tuple(serialized_schema.size(), compressed_schema->ToString());
+      compressed_schema_cache[info.serialization_cache_key()] = cached_schema_result;
+    }
+  }
 
   // descriptor
   RETURN_NOT_OK(ToProto(info.descriptor(), pb_info->mutable_flight_descriptor()));

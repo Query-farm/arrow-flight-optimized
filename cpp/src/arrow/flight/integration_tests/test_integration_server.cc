@@ -92,7 +92,7 @@ class FlightIntegrationTestServer : public FlightServerBase {
       FlightEndpoint endpoint1({{request.path[0]}, {server_location}, std::nullopt, ""});
 
       FlightInfo::Data flight_data;
-      RETURN_NOT_OK(internal::SchemaToString(*flight.schema, &flight_data.schema));
+      RETURN_NOT_OK(internal::SchemaToString(*flight.schema, &flight_data.schema, ""));
       flight_data.descriptor = request;
       flight_data.endpoints = {endpoint1};
       flight_data.total_records = 0;

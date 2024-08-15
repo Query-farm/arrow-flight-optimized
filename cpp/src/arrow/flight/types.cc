@@ -34,6 +34,7 @@
 #include "arrow/table.h"
 #include "arrow/util/base64.h"
 #include "arrow/util/formatting.h"
+#include "arrow/util/key_value_metadata.h"
 #include "arrow/util/logging.h"
 #include "arrow/util/string.h"
 #include "arrow/util/string_builder.h"
@@ -161,7 +162,8 @@ arrow::Result<std::shared_ptr<Schema>> SchemaResult::GetSchema(
 
 arrow::Result<std::unique_ptr<SchemaResult>> SchemaResult::Make(const Schema& schema) {
   std::string schema_in;
-  RETURN_NOT_OK(internal::SchemaToString(schema, &schema_in));
+  const std::string empty = std::string();
+  RETURN_NOT_OK(internal::SchemaToString(schema, &schema_in, empty));
   return std::make_unique<SchemaResult>(std::move(schema_in));
 }
 
@@ -270,7 +272,21 @@ arrow::Result<FlightInfo> FlightInfo::Make(const Schema& schema,
   data.total_bytes = total_bytes;
   data.ordered = ordered;
   data.app_metadata = std::move(app_metadata);
-  RETURN_NOT_OK(internal::SchemaToString(schema, &data.schema));
+
+  data.serialization_cache_key = "";
+  std::shared_ptr<const arrow::KeyValueMetadata> schema_metadata = schema.metadata();
+  if (schema_metadata) {
+    std::string value;
+
+    auto key_result = schema_metadata->Get("serialization_cache_key");
+    if (key_result.ok()) {
+      data.serialization_cache_key = key_result.ValueOrDie();
+    }
+  }
+
+  RETURN_NOT_OK(
+      internal::SchemaToString(schema, &data.schema, data.serialization_cache_key));
+
   return FlightInfo(data);
 }
 

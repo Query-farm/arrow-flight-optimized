@@ -377,6 +377,11 @@ message FlightInfo {
    * but there is none required by the spec.
    */
   bytes app_metadata = 7;
+
+  /*
+    * The decompressed size of the schema in bytes.
+    */
+  int64 schema_size = 8;
 }
 
 /*

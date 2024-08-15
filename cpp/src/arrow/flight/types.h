@@ -599,6 +599,7 @@ class ARROW_FLIGHT_EXPORT FlightInfo {
     int64_t total_bytes = -1;
     bool ordered = false;
     std::string app_metadata;
+    std::string serialization_cache_key;
   };
 
   explicit FlightInfo(Data data) : data_(std::move(data)), reconstructed_schema_(false) {}
@@ -621,6 +622,10 @@ class ARROW_FLIGHT_EXPORT FlightInfo {
       ipc::DictionaryMemo* dictionary_memo) const;
 
   const std::string& serialized_schema() const { return data_.schema; }
+
+  const std::string& serialization_cache_key() const {
+    return data_.serialization_cache_key;
+  }
 
   /// The descriptor associated with this flight, may not be set
   const FlightDescriptor& descriptor() const { return data_.descriptor; }
