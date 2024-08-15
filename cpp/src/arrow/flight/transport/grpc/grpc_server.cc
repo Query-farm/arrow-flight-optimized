@@ -621,7 +621,10 @@ class GrpcServerTransport : public internal::ServerTransport {
 
     // Disable SO_REUSEPORT - it makes debugging/testing a pain as
     // leftover processes can handle requests on accident
-    builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 0);
+
+    // Allow reuse of the port so that multiple processes can listen to the same port.
+    // Otherwise we need to use another load balancer.
+    // builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 0);
 
     if (options.builder_hook) {
       options.builder_hook(&builder);
