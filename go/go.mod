@@ -17,6 +17,7 @@
 module github.com/apache/arrow/go/v17
 
 go 1.21
+toolchain go1.22.5
 
 require (
 	github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c
@@ -39,7 +40,7 @@ require (
 	golang.org/x/sys v0.21.0
 	golang.org/x/tools v0.22.0
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028
-	gonum.org/v1/gonum v0.15.0
+	gonum.org/v1/gonum v0.15.1
 	google.golang.org/grpc v1.63.2
 	google.golang.org/protobuf v1.34.2
 	modernc.org/sqlite v1.29.6
