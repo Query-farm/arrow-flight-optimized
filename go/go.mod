@@ -17,6 +17,7 @@
 module github.com/apache/arrow/go/v17
 
 go 1.21
+toolchain go1.22.5
 
 require (
 	github.com/JohnCGriffin/overflow v0.0.0-20211019200055-46fa312c352c
@@ -49,12 +50,13 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hamba/avro/v2 v2.22.1
 	github.com/huandu/xstrings v1.4.0
-	github.com/substrait-io/substrait-go v0.4.2
+	github.com/substrait-io/substrait-go v1.0.1
 	github.com/tidwall/sjson v1.2.5
 )
 
 require (
 	github.com/alecthomas/participle/v2 v2.1.0 // indirect
+	github.com/creasty/defaults v1.8.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fatih/color v1.15.0 // indirect
